@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHAI NSV Dashboard - Pavement Distress Monitoring</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fas fa-road"></i> NHAI NSV Dashboard</a>
+            <span class="navbar-text text-light">
+                <i class="fas fa-satellite"></i> Real-time Pavement Monitoring
+            </span>
+        </div>
+    </nav>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="position-fixed top-50 start-50 translate-middle" style="z-index: 9999; display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-center">Processing data...</p>
+    </div>
+
+    <div class="container mt-4">
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-number" id="totalPoints">0</div>
+                    <div class="stats-label">Total Survey Points</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #dc3545 0%, #fd5e53 100%);">
+                    <div class="stats-number" id="highSeverity">0</div>
+                    <div class="stats-label">High Severity Issues</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #fd7e14 0%, #ffb347 100%);">
+                    <div class="stats-number" id="mediumSeverity">0</div>
+                    <div class="stats-label">Medium Severity Issues</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                    <div class="stats-number" id="lowSeverity">0</div>
+                    <div class="stats-label">Low Severity Issues</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Data Upload Section -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-upload"></i> Data Upload
+                    </div>
+                    <div class="card-body">
+                        <div class="data-upload" id="uploadArea">
+                            <div class="upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <p class="mb-2"><strong>Upload NSV Data Files</strong></p>
+                            <p class="text-muted small">Drag & drop CSV/Excel files here or click to browse</p>
+                            <input type="file" class="file-input" id="file-input" accept=".csv,.xlsx,.xls" multiple>
+                            <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-input').click()">
+                                <i class="fas fa-folder-open"></i> Browse Files
+                            </button>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-success btn-sm w-100" id="sample-data-btn">
+                                <i class="fas fa-download"></i> Load Sample Data
+                            </button>
+                        </div>
+                        
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-info btn-sm flex-fill" id="refresh-data-btn">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                            <button class="btn btn-warning btn-sm flex-fill" id="export-data-btn">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <button class="btn btn-danger btn-sm flex-fill" id="clear-data-btn">
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <i class="fas fa-filter"></i> Filters
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="severity-filter" class="form-label">Severity Level</label>
+                            <select class="form-select" id="severity-filter">
+                                <option value="">All Severities</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="type-filter" class="form-label">Measurement Type</label>
+                            <select class="form-select" id="type-filter">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="highway-filter" class="form-label">Highway</label>
+                            <select class="form-select" id="highway-filter">
+                                <option value="">All Highways</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle"></i> Legend
+                    </div>
+                    <div class="card-body">
+                        <div class="legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: #dc3545;"></div>
+                                <span>High Severity</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: #fd7e14;"></div>
+                                <span>Medium Severity</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: #28a745;"></div>
+                                <span>Low Severity</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Section -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-map"></i> Pavement Distress Map
+                        <div class="float-end">
+                            <button class="btn btn-sm btn-outline-light" onclick="centerMapOnIndia()">
+                                <i class="fas fa-crosshairs"></i> Center on India
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Severity List Section -->
+        <div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-list"></i> Severity Issues</span>
+                
+            </div>
+            <div class="card-body p-0">
+                <div class="severity-list-container">
+                    <div class="severity-list-header p-3 bg-light d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Click on any item to navigate to location</small>
+                        <div class="severity-stats" id="severity-stats" style="display: none;">
+                            <small class="text-muted">Showing <span id="showing-count">0</span> of <span id="total-count">0</span> items</small>
+                        </div>
+                    </div>
+                    <div class="severity-list" id="severity-list">
+                        <div class="text-center p-4 text-muted">
+                            <i class="fas fa-upload fa-2x mb-2"></i>
+                            <p>No data loaded yet</p>
+                            <small>Upload data files to see severity issues</small>
+                        </div>
+                    </div>
+                    <div class="load-more-container text-center p-3" id="load-more-container" style="display: none;">
+                        <button class="btn btn-outline-primary btn-sm" id="load-more-btn" onclick="loadMoreItems()">
+                            <i class="fas fa-plus"></i> Load More (50)
+                        </button>
+                        <div class="mt-2">
+                            <small class="text-muted" id="load-more-info">Load 50 more items</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+        <!-- Statistics Section -->
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-bar"></i> Statistics
+                    </div>
+                    <div class="card-body">
+                        <div id="statistics">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-chart-line fa-2x mb-2"></i>
+                                <p>No statistics available</p>
+                                <small>Upload data to see detailed statistics</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- Custom JavaScript -->
+    <script src="script.js"></script>
+
+    <script>
+        // Additional helper functions for the frontend
+        function centerMapOnIndia() {
+            if (map) {
+                map.setView([20.5937, 78.9629], 5);
+            }
+        }
+
+        function filterSeverityList(severity) {
+            // Update active button
+            document.querySelectorAll('[id^="filter"]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById('filter' + severity).classList.add('active');
+            
+            // Filter the severity list items
+            const severityItems = document.querySelectorAll('.severity-section');
+            severityItems.forEach(section => {
+                if (severity === 'All') {
+                    section.style.display = 'block';
+                } else {
+                    const sectionSeverity = section.querySelector('.severity-badge').textContent.trim();
+                    section.style.display = sectionSeverity === severity ? 'block' : 'none';
+                }
+            });
+        }
+
+        // Update statistics display function
+        function updateStatistics(stats) {
+            // Update the main stat cards
+            document.getElementById('totalPoints').textContent = stats.total || 0;
+            document.getElementById('highSeverity').textContent = stats.high || 0;
+            document.getElementById('mediumSeverity').textContent = stats.medium || 0;
+            document.getElementById('lowSeverity').textContent = stats.low || 0;
+            
+            // Update the detailed statistics section
+            const statsContainer = document.getElementById('statistics');
+            if (statsContainer && stats.total > 0) {
+                statsContainer.innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>By Measurement Type</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Total</th>
+                                            <th>High</th>
+                                            <th>Medium</th>
+                                            <th>Low</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${Object.entries(stats.by_type || {}).map(([type, counts]) => `
+                                            <tr>
+                                                <td>${type}</td>
+                                                <td>${counts.total}</td>
+                                                <td class="text-danger">${counts.high}</td>
+                                                <td class="text-warning">${counts.medium}</td>
+                                                <td class="text-success">${counts.low}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>By Highway</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Highway</th>
+                                            <th>Total</th>
+                                            <th>High</th>
+                                            <th>Medium</th>
+                                            <th>Low</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${Object.entries(stats.by_highway || {}).map(([highway, counts]) => `
+                                            <tr>
+                                                <td>${highway}</td>
+                                                <td>${counts.total}</td>
+                                                <td class="text-danger">${counts.high}</td>
+                                                <td class="text-warning">${counts.medium}</td>
+                                                <td class="text-success">${counts.low}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // File drag and drop functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('file-input');
+
+            // Drag and drop events
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+            });
+
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    fileInput.dispatchEvent(new Event('change'));
+                }
+            });
+
+            // Click to upload
+            uploadArea.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'BUTTON') {
+                    fileInput.click();
+                }
+            });
+        });
+    </script>
+    <!-- Export Filter Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalLabel">
+                    <i class="fas fa-download"></i> Export Data with Filters
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Filter Form -->
+                <form id="exportFilterForm">
+                    <div class="row">
+                        <!-- Severity Filter -->
+                        <div class="col-md-6 mb-3">
+                            <label for="export-severity-filter" class="form-label">Severity Level</label>
+                            <select class="form-select" id="export-severity-filter" name="severity">
+                                <option value="">All Severities</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Type Filter -->
+                        <div class="col-md-6 mb-3">
+                            <label for="export-type-filter" class="form-label">Damage Type</label>
+                            <select class="form-select" id="export-type-filter" name="type">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Highway Filter -->
+                        <div class="col-md-6 mb-3">
+                            <label for="export-highway-filter" class="form-label">Highway</label>
+                            <select class="form-select" id="export-highway-filter" name="highway">
+                                <option value="">All Highways</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Limit Number of Records -->
+                        <div class="col-md-6 mb-3">
+                            <label for="export-limit" class="form-label">Number of Records</label>
+                            <select class="form-select" id="export-limit" name="limit">
+                                <option value="">All Records</option>
+                                <option value="50">50 Records</option>
+                                <option value="100">100 Records</option>
+                                <option value="500">500 Records</option>
+                                <option value="1000">1000 Records</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Column Selection -->
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">Select Columns to Export</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="googleMapsLink" id="col-googleMapsLink" checked>
+                                        <label class="form-check-label" for="col-googleMapsLink">Google Maps Link</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="highway" id="col-highway" checked>
+                                        <label class="form-check-label" for="col-highway">Highway</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="lane" id="col-lane" checked>
+                                        <label class="form-check-label" for="col-lane">Lane</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="lat" id="col-lat" checked>
+                                        <label class="form-check-label" for="col-lat">Latitude</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="lng" id="col-lng" checked>
+                                        <label class="form-check-label" for="col-lng">Longitude</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="startChainage" id="col-startChainage" checked>
+                                        <label class="form-check-label" for="col-startChainage">Start Chainage</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="endChainage" id="col-endChainage" checked>
+                                        <label class="form-check-label" for="col-endChainage">End Chainage</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="structure" id="col-structure" checked>
+                                        <label class="form-check-label" for="col-structure">Structure</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="type" id="col-type" checked>
+                                        <label class="form-check-label" for="col-type">Type</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="value" id="col-value" checked>
+                                        <label class="form-check-label" for="col-value">Value</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="unit" id="col-unit" checked>
+                                        <label class="form-check-label" for="col-unit">Unit</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="severity" id="col-severity" checked>
+                                        <label class="form-check-label" for="col-severity">Severity</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="limit" id="col-limit" checked>
+                                        <label class="form-check-label" for="col-limit">Limit</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" value="datetime" id="col-datetime" checked>
+                                        <label class="form-check-label" for="col-datetime">Date Time</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview Section -->
+                        <div class="col-md-12 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Preview</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="export-preview" class="text-muted">
+                                        <small>Select filters to see preview</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-info" id="preview-export-btn">
+                    <i class="fas fa-eye"></i> Preview
+                </button>
+                <button type="button" class="btn btn-success" id="confirm-export-btn">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
